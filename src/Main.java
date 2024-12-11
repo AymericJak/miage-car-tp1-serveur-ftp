@@ -31,8 +31,15 @@ public class Main {
                 if (Objects.equals(str, "USER miage")) {
                     System.out.println("name : " + str);
                     outputStream.write("331 username ok\r\n".getBytes());
+
+                    String password = scanner.nextLine();
+                    if (Objects.equals(password, "PASS miage")) {
+                        outputStream.write("230 password ok\r\n".getBytes());
+                    } else {
+                        outputStream.write("430 invalid password\r\n".getBytes());
+                    }
                 } else {
-                    outputStream.write("530 invalid username\r\n".getBytes());
+                    outputStream.write("430 invalid username\r\n".getBytes());
                 }
 
 

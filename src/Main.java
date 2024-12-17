@@ -10,6 +10,10 @@ public class Main {
 
     private static final int PORT = 2121;
 
+    private static void handleLogout(OutputStream outputStream) throws IOException {
+        outputStream.write("221 Fin de la connection. Au revoir.\r\n".getBytes());
+    }
+
     public static void main(String[] args) {
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             System.out.println("Serveur FTP, écoute sur le port " + PORT);
@@ -26,15 +30,24 @@ public class Main {
                 // LOGIN
                 InputStream inputStream = clientSocket.getInputStream();
                 Scanner scanner = new Scanner(inputStream);
-                String str = scanner.nextLine();
+                String userCommand = scanner.nextLine();
 
-                if (Objects.equals(str, "USER miage")) {
-                    System.out.println("name : " + str);
+                if (Objects.equals(userCommand, "USER miage")) {
+                    System.out.println("name : " + userCommand);
                     outputStream.write("331 username ok\r\n".getBytes());
 
                     String password = scanner.nextLine();
                     if (Objects.equals(password, "PASS miage")) {
                         outputStream.write("230 password ok\r\n".getBytes());
+                        while (true) {
+                            String command = scanner.nextLine();
+                            if (Objects.equals(command, "QUIT")) {
+                                handleLogout(outputStream);
+                                break;
+                            } else {
+                                outputStream.write("502 Commande non implémentée.\r\n".getBytes());
+                            }
+                        }
                     } else {
                         outputStream.write("430 invalid password\r\n".getBytes());
                     }
@@ -43,12 +56,9 @@ public class Main {
                 }
 
 
-                // PASSWORD
-
-
                 // Fermeture des connexions
-                //clientSocket.close();
-                //serverSocket.close();
+                clientSocket.close();
+//                serverSocket.close();
             }
 
         } catch (IOException e) {

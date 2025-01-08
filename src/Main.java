@@ -1,12 +1,46 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Scanner;
 
 public class Main {
 
     private static final int PORT = 2121;
+    private static final Map<String, String> USER_CREDENTIALS = new HashMap<>();
+    static {
+        USER_CREDENTIALS.put("miage", "miage");
+        USER_CREDENTIALS.put("root", "root");
+        USER_CREDENTIALS.put("aymeric", "miage");
+    }
+
+    private static boolean handleLogin(Scanner scanner, OutputStream outputStream) throws IOException {
+        String userCommand = scanner.nextLine();
+        System.out.println("Commande reçue dans handleLogin : " + userCommand);
+
+        if (userCommand.startsWith("USER ")) {
+            String username = userCommand.substring(5).trim();
+            if (USER_CREDENTIALS.containsKey(username)) {
+                System.out.println("name : " + userCommand);
+                outputStream.write("331 username ok\r\n".getBytes());
+                String password = scanner.nextLine();
+                password = password.substring(5).trim();
+                if (Objects.equals(USER_CREDENTIALS.get(username), password)) {
+                    outputStream.write("230 password ok\r\n".getBytes());
+                    System.out.println("password : " + password);
+                    return true;
+                } else {
+                    outputStream.write("430 invalid password\r\n".getBytes());
+                }
+
+            } else {
+                outputStream.write("430 invalid username\r\n".getBytes());
+            }
+        }
+        return false;
+    }
 
     private static void handleLogout(OutputStream outputStream) throws IOException {
         outputStream.write("221 Fin de la connection. Au revoir.\r\n".getBytes());
@@ -34,7 +68,6 @@ public class Main {
         if (file.exists()) {
             outputStream.write("150 File status okay; about to open data connection.\r\n".getBytes());
 
-            
 
             // File transfer
             try (InputStream fileInputStream = new FileInputStream(file)) {
@@ -68,45 +101,39 @@ public class Main {
                 // LOGIN
                 InputStream inputStream = clientSocket.getInputStream();
                 Scanner scanner = new Scanner(inputStream);
-                String userCommand = scanner.nextLine();
-
-                if (Objects.equals(userCommand, "USER miage")) {
-                    System.out.println("name : " + userCommand);
-                    outputStream.write("331 username ok\r\n".getBytes());
-
-                    String password = scanner.nextLine();
-                    if (Objects.equals(password, "PASS miage")) {
-                        outputStream.write("230 password ok\r\n".getBytes());
-                        System.out.println("password : " + password);
-                        while (true) {
-                            String command = scanner.nextLine();
-                            System.out.println("Received command : " + command);
-                            if (Objects.equals(command, "QUIT")) {
-                                handleLogout(outputStream);
-                                break;
-                            } else if (Objects.equals(command, "SIZE")) {
-                                handleSizeCommand(outputStream, command);
-                            } else if (Objects.equals(command, "SYST")) {
-                                outputStream.write("218 Syst mess.\r\n".getBytes());
-                            } else if (Objects.equals(command, "FEAT")) {
-                                outputStream.write("211 Feat mess.\r\n".getBytes());
-                            } else if (Objects.equals(command, "EPSV")) {
-                                outputStream.write("Entering Passive Mode (h1,h2,h3,h4,p1,p2).\r\n".getBytes());
-                            } else if (Objects.equals(command, "LPSV")) {
-                                outputStream.write("228 LPSV (long passive) mess.\r\n".getBytes());
-                            } else if (Objects.equals(command, "RETR")) {
-                                handleGetCommand(outputStream, clientSocket);
-                            } else {
-                                outputStream.write("502 Command non implémentée.\r\n".getBytes());
-                            }
-                        }
-                    } else {
-                        outputStream.write("430 invalid password\r\n".getBytes());
+                boolean loggedIn = false;
+                while (!loggedIn) {
+                    loggedIn = handleLogin(scanner, outputStream);
+                    if (!loggedIn) {
+                        outputStream.write("Veuillez réessayer de vous connecter.\r\n".getBytes());
                     }
-                } else {
-                    outputStream.write("430 invalid username\r\n".getBytes());
                 }
 
+
+                if (loggedIn) {
+                    while (true) {
+                        String command = scanner.nextLine();
+                        System.out.println("Received command : " + command);
+                        if (Objects.equals(command, "QUIT")) {
+                            handleLogout(outputStream);
+                            break;
+                        } else if (Objects.equals(command, "SIZE")) {
+                            handleSizeCommand(outputStream, command);
+                        } else if (Objects.equals(command, "SYST")) {
+                            outputStream.write("218 Syst mess.\r\n".getBytes());
+                        } else if (Objects.equals(command, "FEAT")) {
+                            outputStream.write("211 Feat mess.\r\n".getBytes());
+                        } else if (Objects.equals(command, "EPSV")) {
+                            outputStream.write("Entering Passive Mode (h1,h2,h3,h4,p1,p2).\r\n".getBytes());
+                        } else if (Objects.equals(command, "LPSV")) {
+                            outputStream.write("228 LPSV (long passive) mess.\r\n".getBytes());
+                        } else if (Objects.equals(command, "RETR")) {
+                            handleGetCommand(outputStream, clientSocket);
+                        } else {
+                            outputStream.write("502 Command non implémentée.\r\n".getBytes());
+                        }
+                    }
+                }
 
                 // Fermeture des connexions
                 clientSocket.close();

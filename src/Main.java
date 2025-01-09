@@ -105,6 +105,41 @@ public class Main {
         outputStream.write(response.getBytes());
     }
 
+    private static void handleLISTCommand(OutputStream outputStream, Socket clientSocket, String pathName) throws IOException {
+        File directory = (pathName == null || pathName.isEmpty()) ? new File(".") : new File(pathName);
+
+        if (!directory.exists() || !directory.isDirectory()) {
+            outputStream.write("550 Directory not found.\r\n".getBytes());
+            return;
+        }
+
+        outputStream.write("150 File status okay; about to open data connection.\r\n".getBytes());
+        File[] files = directory.listFiles();
+        if (files == null || files.length == 0) {
+            outputStream.write("226 Directory is empty.\r\n".getBytes());
+            return;
+        }
+
+        try (Socket dataConnection = dataSocket.accept(); OutputStream dataOutputStream = dataConnection.getOutputStream()) {
+            StringBuilder listStr = new StringBuilder();
+            for (File file: files) {
+                String type = file.isDirectory() ? "d" : "-";
+                String size = file.isFile() ? String.valueOf(file.length()) : "0";
+                String name = file.getName();
+                listStr.append(String.format("%s %10s %s\r\n", type, size, name));
+            }
+            dataOutputStream.write(listStr.toString().getBytes());
+        } catch (IOException e) {
+            outputStream.write("426 Connection closed; transfer aborted.\r\n".getBytes());
+            return;
+        } finally {
+            dataSocket.close();
+            dataSocket = null;
+        }
+
+        outputStream.write("226 Directory LIST sent successfully.\r\n".getBytes());
+    }
+
     public static void main(String[] args) {
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             System.out.println("Serveur FTP, écoute sur le port " + PORT);
@@ -150,6 +185,9 @@ public class Main {
                         } else if (command.startsWith("RETR ")) {
                             String fileName = command.substring(5).trim();
                             handleRETRCommand(outputStream, clientSocket, fileName);
+                        } else if (command.startsWith("LIST ")) {
+                            String pathName = command.substring(5).trim();
+                            handleLISTCommand(outputStream, clientSocket, pathName);
                         } else {
                             outputStream.write("502 Command non implémentée.\r\n".getBytes());
                         }

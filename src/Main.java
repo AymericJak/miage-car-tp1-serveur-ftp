@@ -9,7 +9,9 @@ import java.util.Scanner;
 public class Main {
 
     private static final int PORT = 2121;
+    private static ServerSocket dataSocket = null;
     private static final Map<String, String> USER_CREDENTIALS = new HashMap<>();
+
     static {
         USER_CREDENTIALS.put("miage", "miage");
         USER_CREDENTIALS.put("root", "root");
@@ -57,32 +59,50 @@ public class Main {
         }
     }
 
-    private static void handleGetCommand(OutputStream outputStream, Socket clientSocket) throws IOException {
-        System.out.println("Entrée dans get");
-        InputStream inputStream = clientSocket.getInputStream();
-        Scanner scanner = new Scanner(inputStream);
+    private static void handleRETRCommand(OutputStream outputStream, Socket clientSocket, String fileName) throws IOException {
+        System.out.println("Entrée dans get pour le fichier : " + fileName);
 
-        String fileName = scanner.nextLine(); // Envoi du nom du fichier par le client
-
-        File file = new File(fileName);
+        File file = new File("data/" + fileName);
         if (file.exists()) {
+
+            System.out.println(dataSocket);
+            if (dataSocket == null || dataSocket.isClosed()) {
+                outputStream.write("425 Unable to establish a data connection.\r\n".getBytes());
+                return;
+            }
+
             outputStream.write("150 File status okay; about to open data connection.\r\n".getBytes());
 
-
-            // File transfer
-            try (InputStream fileInputStream = new FileInputStream(file)) {
+            try (Socket dataConnection = dataSocket.accept(); InputStream fileInputStream = new FileInputStream(file); OutputStream dataOutputStream = dataConnection.getOutputStream()) {
                 byte[] bytes = new byte[1024];
                 int bytesRead;
                 while ((bytesRead = fileInputStream.read(bytes)) != -1) {
-                    outputStream.write(bytes, 0, bytesRead);
+                    dataOutputStream.write(bytes, 0, bytesRead);
                 }
+            } catch (IOException e) {
+                outputStream.write("426 Connection closed; transfer aborted.\r\n".getBytes());
+                return;
+            } finally {
+                dataSocket.close();
+                dataSocket = null;
             }
+
             outputStream.write("226 Successful file transfer. Closing data connection\r\n".getBytes());
 
         } else {
             outputStream.write("550 File not found.\r\n".getBytes());
         }
+    }
 
+    private static void handleEPSVCommand(OutputStream outputStream) throws IOException {
+        if (dataSocket != null && !dataSocket.isClosed()) {
+            dataSocket.close();
+        }
+        dataSocket = new ServerSocket(0); // temporary port
+        int port = dataSocket.getLocalPort();
+
+        String response = "229 Entering Extended Passive Mode (|||" + port + "|)\r\n";
+        outputStream.write(response.getBytes());
     }
 
     public static void main(String[] args) {
@@ -124,11 +144,12 @@ public class Main {
                         } else if (Objects.equals(command, "FEAT")) {
                             outputStream.write("211 Feat mess.\r\n".getBytes());
                         } else if (Objects.equals(command, "EPSV")) {
-                            outputStream.write("Entering Passive Mode (h1,h2,h3,h4,p1,p2).\r\n".getBytes());
+                            handleEPSVCommand(outputStream);
                         } else if (Objects.equals(command, "LPSV")) {
-                            outputStream.write("228 LPSV (long passive) mess.\r\n".getBytes());
-                        } else if (Objects.equals(command, "RETR")) {
-                            handleGetCommand(outputStream, clientSocket);
+                            outputStream.write("228 Entering LPSV (long passive) mode.\r\n".getBytes());
+                        } else if (command.startsWith("RETR ")) {
+                            String fileName = command.substring(5).trim();
+                            handleRETRCommand(outputStream, clientSocket, fileName);
                         } else {
                             outputStream.write("502 Command non implémentée.\r\n".getBytes());
                         }

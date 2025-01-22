@@ -9,6 +9,8 @@ import java.util.Scanner;
 public class Main {
 
     private static final int PORT = 2121;
+    private static final String BASE_DIRECTORY = "data";
+    private static String currentDir = BASE_DIRECTORY;
     private static ServerSocket dataSocket = null;
     private static final Map<String, String> USER_CREDENTIALS = new HashMap<>();
 
@@ -62,7 +64,7 @@ public class Main {
     private static void handleRETRCommand(OutputStream outputStream, Socket clientSocket, String fileName) throws IOException {
         System.out.println("Entrée dans get pour le fichier : " + fileName);
 
-        File file = new File("data/" + fileName);
+        File file = new File(currentDir + "/" + fileName);
         if (file.exists()) {
 
             System.out.println(dataSocket);
@@ -106,7 +108,12 @@ public class Main {
     }
 
     private static void handleLISTCommand(OutputStream outputStream, Socket clientSocket, String pathName) throws IOException {
-        File directory = (pathName == null || pathName.isEmpty()) ? new File(".") : new File(pathName);
+        File directory;
+        if (pathName == null || pathName.isEmpty()) {
+            directory = new File(currentDir);
+        } else {
+            directory = new File(currentDir, pathName);
+        }
 
         if (!directory.exists() || !directory.isDirectory()) {
             outputStream.write("550 Directory not found.\r\n".getBytes());
@@ -122,7 +129,7 @@ public class Main {
 
         try (Socket dataConnection = dataSocket.accept(); OutputStream dataOutputStream = dataConnection.getOutputStream()) {
             StringBuilder listStr = new StringBuilder();
-            for (File file: files) {
+            for (File file : files) {
                 String type = file.isDirectory() ? "d" : "-";
                 String size = file.isFile() ? String.valueOf(file.length()) : "0";
                 String name = file.getName();
@@ -188,6 +195,9 @@ public class Main {
                         } else if (command.startsWith("LIST ")) {
                             String pathName = command.substring(5).trim();
                             handleLISTCommand(outputStream, clientSocket, pathName);
+                        } else if (command.startsWith("CWD ")) {
+                            String dirName = command.substring(4).trim();
+                            handleCWDCommand(outputStream, dirName);
                         } else {
                             outputStream.write("502 Command non implémentée.\r\n".getBytes());
                         }
@@ -202,5 +212,24 @@ public class Main {
         } catch (IOException e) {
             System.err.println("Erreur du serveur : " + e.getMessage());
         }
+    }
+
+    private static void handleCWDCommand(OutputStream outputStream, String dirName) throws IOException {
+        File baseDirFile = new File(BASE_DIRECTORY).getCanonicalFile();
+        File newDirectory = new File(currentDir, dirName).getCanonicalFile();
+
+        if (!newDirectory.exists() || !newDirectory.isDirectory()) {
+            outputStream.write("550 Directory not found.\r\n".getBytes());
+            return;
+        }
+
+        if (!newDirectory.getPath().startsWith(baseDirFile.getPath())) {
+            outputStream.write("550 Access denied.\r\n".getBytes());
+            return;
+        }
+        currentDir = newDirectory.getCanonicalPath();
+        System.out.println("Répertoire actuel = " + currentDir);
+
+        outputStream.write(("250 Directory successfully changed to " + currentDir + "\r\n").getBytes());
     }
 }

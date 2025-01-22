@@ -192,8 +192,15 @@ public class Main {
                         } else if (command.startsWith("RETR ")) {
                             String fileName = command.substring(5).trim();
                             handleRETRCommand(outputStream, clientSocket, fileName);
-                        } else if (command.startsWith("LIST ")) {
-                            String pathName = command.substring(5).trim();
+                        } else if (command.startsWith("LIST")) {
+                            String[] parts = command.split(" ");
+                            String pathName;
+
+                            if (parts.length == 1) {
+                                pathName = ".";
+                            } else {
+                                pathName = command.substring(5).trim();
+                            }
                             handleLISTCommand(outputStream, clientSocket, pathName);
                         } else if (command.startsWith("CWD ")) {
                             String dirName = command.substring(4).trim();
